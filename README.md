@@ -41,7 +41,7 @@ pip install -r requirements.txt
 Create a file named .env in the root directory of the project. This file will be used to store sensitive data such as the path to your Service Account key file, your Google Workspace customer ID, and your Google Workspace admin email.
 
 The `.env` file should have the following structure:
-```.env=
+```.env
 GCP_SEVERICE_ACCOUNT_KYE=YOUR_XXX.json
 YOUR_CUSTOMER_ID=YOUR_ID_XXX
 YOUR_ADMIN_EMAIL=YOUR_ADMIN_XXX@DOMAIN
@@ -93,7 +93,7 @@ python app_test.py
 ## Explanation of the code
 1. 先透過Admin管理員資格得到Diectory名單
 
- ```python=
+ ```python
 def main():
     # Path to your Service Account key file
     key_file_path = os.getenv('GCP_SEVERICE_ACCOUNT_KYE')
@@ -121,7 +121,7 @@ def main():
 * ` user_creds`: 得到當前用戶憑證資格做更新
 * `contact_list`: 當前用戶的Contacts清單
 * `contact_emails`: 只提取e-mail部分做比對，沒寫入的就補寫，過時的名單之後做刪除
-```python=
+```python
             # Delegating authority to the service account to impersonate the current user
             user_creds = creds.with_subject(user['primaryEmail'])
             service = build('people', 'v1', credentials=user_creds)
@@ -145,7 +145,7 @@ def main():
 
 * `for attempt in range(5):` 預防寫入時發生問題，可能為寫入頻率受限或是Google Server端問題，若寫入失敗最多嘗試5次，失敗就跳過log記錄起來
 
-```python=
+```python
             # For each other user
             for contact in users:
                 if contact['primaryEmail'] != user['primaryEmail']:
@@ -183,7 +183,7 @@ def main():
 * `u['primaryEmail']` Directory中已經沒有此成員，而Contacts還有，就要刪除成員避免成為幽靈聯絡人
 * 透過
 `service.people().deleteContact(resourceName=contact['resourceName']).execute()`  People API刪除
-```python=
+```python
             # For each contact email
             for contact_email in contact_emails:
                 # If the contact email does not exist in the Directory
