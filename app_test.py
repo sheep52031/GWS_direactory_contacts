@@ -6,8 +6,7 @@ from googleapiclient.discovery import build
 from time import sleep
 import random
 
-
-# Load the contents of the .env file
+# load .env
 load_dotenv()
 
 # Configure logging
@@ -16,8 +15,10 @@ logging.basicConfig(filename='app.log', filemode='w', level=logging.INFO, format
 # Suppress INFO-level logs for googleapiclient.discovery_cache
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
-def process_users(users, creds):
-    for user in users:
+def process_users(users, creds, limit):
+    for i, user in enumerate(users):
+        if i >= limit:
+            break
         try:
             # Delegating authority to the service account to impersonate the current user
             user_creds = creds.with_subject(user['primaryEmail'])
@@ -95,7 +96,6 @@ def process_users(users, creds):
 def main():
     # Path to your Service Account key file
     key_file_path = os.getenv('GCP_SEVERICE_ACCOUNT_KYE')
-    print(f"Key file path: {os.getenv('GCP_SEVERICE_ACCOUNT_KYE')}")
 
     # Load the Service Account credentials
     creds = service_account.Credentials.from_service_account_file(
@@ -114,7 +114,9 @@ def main():
 
     print(f"Total number of users: {len(users)}")
 
-    process_users(users, creds)
+    test_limit = int(input("Enter the number of users you want to process for testing: "))
+    
+    process_users(users, creds, test_limit)
 
 if __name__ == "__main__":
     main()

@@ -1,9 +1,11 @@
-# Google Workspace Synchronization Script
+# Google Workspace Contacts Synchronization Script
+
+**Github project link**：https://github.com/sheep52031/GWS_direactory_contacts
 
 ## Overview
 此程式將使用者聯絡方式從 `Google Workspace Directory` 複製到 `Google Contacts`中
-專為希望使用 Google Workspace Directory 中的最新信息及時更新 Google 通訊錄的組織而設計。
-在 `Google Workspace Directory` 中**添加或刪除成員**後，運行此程式會更新每一個使用的`Google Contacts` 資料 。
+專為希望將Google Workspace Directory 中的成員聯絡方式匯入至每個成員帳號中的Google Contacts的組織而設計。
+在 `Google Workspace Directory` 中**添加或刪除成員**後，運行此程式會自動更新`Google Contacts` 資料 。
 
 
 ## Requirements 
@@ -20,20 +22,34 @@
 
 
 1. **Enable** the `Admin SDK` and `People API` in your GCP project.
-2. Create a `Service Account` in your GCP project and generate a JSON key.
-3. `Delegate domain-wide authority` to the Service Account.(The next chapter has teaching)
+2. **Create** a `Service Account` in your GCP project and generate a JSON key.
+3. `Delegate domain-wide authority` to the Service Account.(**The next chapter has teaching**)
 4. **Install the required dependencies**.
 
 You can install these dependencies using pip:
 
 ```bash=
-pip install --upgrade google-auth google-auth-httplib2 google-auth-oauthlib google-api-python-client
+pip install --upgrade google-auth google-auth-httplib2 google-auth-oauthlib google-api-python-client python-dotenv
 ```
 or in project root folder use
 ```bash=
 pip install -r requirements.txt
 ```
 
+5. Set up your `.env` file for sensitive data:
+
+Create a file named .env in the root directory of the project. This file will be used to store sensitive data such as the path to your Service Account key file, your Google Workspace customer ID, and your Google Workspace admin email.
+
+The `.env` file should have the following structure:
+```.env=
+GCP_SEVERICE_ACCOUNT_KYE=YOUR_XXX.json
+YOUR_CUSTOMER_ID=YOUR_ID_XXX
+YOUR_ADMIN_EMAIL=YOUR_ADMIN_XXX@DOMAIN
+```
+**`GCP_SEVERICE_ACCOUNT_KYE.json` 將服務帳號憑證放專案資料夾 
+`YOUR_CUSTOMER_ID`要放GWS Customer ID
+`YOUR_ADMINISTATOR_EMAIL`要放GWS管理員的帳號**
+![](https://hackmd.io/_uploads/HJVub9ZUn.png)
 
 ## Service Account Creation and Delegation
 ### To create a service account and delegate it domain-wide authority:
@@ -62,121 +78,121 @@ pip install -r requirements.txt
 
 
 ## Run Script
-在專案根目錄中執行
+在專案根目錄中執行`app.py`則全部匯入
 ```python=
 python app.py
 ```
 
+執行`app_test.py`則可選擇測試人數
+Ex:當輸入提示"1"則將Directory成員全部寫入至第一位成員的Contacts中
+```python=
+python app_test.py
+```
 
+---
 ## Explanation of the code
+1. 先透過Admin管理員資格得到Diectory名單
 
-* 導入所需的module並設置log記錄。該腳本會將logging（例如成功添加和刪除聯繫人）記錄到名為 `app.log` 的文件中。
+ ```python=
+def main():
+    # Path to your Service Account key file
+    key_file_path = os.getenv('GCP_SEVERICE_ACCOUNT_KYE')
 
+    # Load the Service Account credentials
+    creds = service_account.Credentials.from_service_account_file(
+        key_file_path,
+        scopes=['https://www.googleapis.com/auth/admin.directory.user', 'https://www.googleapis.com/auth/contacts'])
 
-```python=
-import logging
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+    # Create a service object for the admin user
+    admin_email = os.getenv('YOUR_ADMIN_EMAIL') 
+    admin_creds = creds.with_subject(admin_email)  # Replace with your Google Workspace admin user
+    service_admin = build('admin', 'directory_v1', credentials=admin_creds)
 
-# Configure logging
-logging.basicConfig(filename='app.log', filemode='w', level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
+    # Get all users
+    customer_id = os.getenv('YOUR_CUSTOMER_ID')
+    results = service_admin.users().list(customer=customer_id).execute()
+    users = results.get('users', [])
+
+    print(f"Total number of users: {len(users)}")
+
+    test_limit = int(input("Enter the number of users you want to process for testing: "))
 ```
-
-
-* 從 JSON 密鑰檔案 loads `Service Account` credentials，
-* 定義授權scopes來訪問Directory API 和Contacts API。
-**P.S 以下的JSON檔案要放你的憑證**
+2. 得到當前用戶的Contacts內容
+* ` user_creds`: 得到當前用戶憑證資格做更新
+* `contact_list`: 當前用戶的Contacts清單
+* `contact_emails`: 只提取e-mail部分做比對，沒寫入的就補寫，過時的名單之後做刪除
 ```python=
-# Path to your Service Account key file
-key_file_path = 'YOUR_Service_Account_KEY.json'
-# Load the Service Account credentials
-creds = service_account.Credentials.from_service_account_file(
-    key_file_path,scopes=['https://www.googleapis.com/auth/admin.directory.user', 'https://www.googleapis.com/auth/contacts'])
-```
+            # Delegating authority to the service account to impersonate the current user
+            user_creds = creds.with_subject(user['primaryEmail'])
+            service = build('people', 'v1', credentials=user_creds)
 
+            # Get the user's contact list
+            connections = service.people().connections().list(resourceName='people/me',\
+                 personFields='names,emailAddresses,occupations,organizations,phoneNumbers').execute()
+            contact_list = connections.get('connections', [])
 
-* 利用Administrator建立了一個Service Object 來獲取 Google Workspace 網域中所有使用者的List。
-**P.S `Administrator@domain`要放GWS管理員的帳號, `YOUR_CUSTOMER_ID`要放GWS Customer ID**
-![](https://hackmd.io/_uploads/HJVub9ZUn.png)
-
-```python=
-# Create a service object for the admin user
-admin_creds = creds.with_subject('Administrator@domain')  # Replace with your Google Workspace admin user
-service_admin = build('admin', 'directory_v1', credentials=admin_creds)
-
-# Get all users
-results = service_admin.users().list(customer='YOUR_CUSTOMER_ID').execute()
-users = results.get('users', [])
-
-```
-
-* 有了Users List，透過授權後可以得到查詢每個使用者帳戶裡各自的Google帳戶Contacts有哪些聯絡人，透過`for loop`一個個查看與更新
-```python=
-# For each user
-for user in users:
-    # Delegating authority to the service account to impersonate the current user
-    user_creds = creds.with_subject(user['primaryEmail'])
-    service = build('people', 'v1', credentials=user_creds)
-
-    # Get the user's contact list
-    connections = service.people().connections().list(resourceName='people/me', personFields='names,emailAddresses,occupations,organizations,phoneNumbers').execute()
-    contact_list = connections.get('connections', [])
+            # Get the email addresses of all contacts
+            contact_emails = [contact.get('emailAddresses', [{}])[0].get('value') for contact in contact_list]
 
 ```
 
-* 獲取到當前帳戶Contacts中聯絡人的電子郵件地址，接著檢查 Google Workspace 網域中的每個用戶，避免將自己資訊加入到Contacts
-，
-```python=
-    # Get the email addresses of all contacts
-    contact_emails = [contact.get('emailAddresses', [{}])[0].get('value') for contact in contact_list]
+ 
 
-    # For each other user
-    for contact in users:
-        if contact['primaryEmail'] != user['primaryEmail']:
-            # Prepare contact info
-            contact_info = {
-                'names': [{'givenName': contact['name']['fullName']}],
-                'emailAddresses': [{'value': contact['primaryEmail']}],
-            }
+3. 是否該寫入的辨別機制
+
+* `user['primaryEmail']` 是Directory中的成員，`contact['primaryEmail']`是Contacts中的成員，2者比對後還沒寫入的就利用`contact_info`搜集好資訊
+透過`service.people().createContact(body=contact_info).execute()`寫入到Contacts中
+
+* `for attempt in range(5):` 預防寫入時發生問題，可能為寫入頻率受限或是Google Server端問題，若寫入失敗最多嘗試5次，失敗就跳過log記錄起來
+
+```python=
+            # For each other user
+            for contact in users:
+                if contact['primaryEmail'] != user['primaryEmail']:
+                    # Prepare contact info
+                    contact_info = {
+                        'names': [{'givenName': contact['name']['fullName']}],
+                        'emailAddresses': [{'value': contact['primaryEmail']}],
+                    }
+                    if 'phones' in contact and contact['phones']:
+                        contact_info['phoneNumbers'] = [{'value': contact['phones'][0]['value']}]
+
+
+                    # Check if the contact already exists in the user's contact list
+                    if not any(c.get('emailAddresses', [{}])[0].get('value') == contact['primaryEmail'] for c in contact_list):
+                        for attempt in range(5):
+                            try:
+                                # Add to user's contact list
+                                service.people().createContact(body=contact_info).execute()
+                                # Log successful contact creation
+                                logging.info(f"Added contact: {contact['primaryEmail']} to {user['primaryEmail']}")
+                                break  # If the API call was successful, we break the loop
+                            except googleapiclient.errors.HttpError as e:
+                                if e.resp.status == 503 and attempt < 4:  # If it's a 503 error and we have attempts left
+                                    wait_time = (2 ** attempt) + random.random()  # Exponential backoff with jitter
+                                    logging.error(f"HttpError 503, retrying in {wait_time} seconds")
+                                    time.sleep(wait_time)
+                                else:
+                                    logging.error(f"Failed to add contact {contact['primaryEmail']} to {user['primaryEmail']}: {e}")
+                                    break                                 
 ```
 
-* 如果有title和orgUnitPath或聯絡電話也加入到Contacts中
+
+4. 刪除(更新)Contacts成員的機制
+
+* `u['primaryEmail']` Directory中已經沒有此成員，而Contacts還有，就要刪除成員避免成為幽靈聯絡人
+* 透過
+`service.people().deleteContact(resourceName=contact['resourceName']).execute()`  People API刪除
 ```python=
-            if 'organizations' in contact and contact['organizations']:
-                if 'title' in contact['organizations'][0]:
-                    contact_info['organizations'] = [{'title': contact['organizations'][0]['title']}]
-                if 'orgUnitPath' in contact:
-                    if contact_info.get('organizations'):
-                        contact_info['organizations'][0]['name'] = contact['orgUnitPath']
-                    else:
-                        contact_info['organizations'] = [{'name': contact['orgUnitPath']}]
-            if 'phones' in contact and contact['phones']:
-                contact_info['phoneNumbers'] = [{'value': contact['phones'][0]['value']}]
-```
-
-* 避免更新資料重複加入一樣的聯絡人到Contacts中而做的檢查，確定沒有此人在Contacts中才加入
-```python=
-            # Check if the contact already exists in the user's contact list
-            if not any(c for c in contact_list if c.get('emailAddresses', [{}])[0].get('value') == contact['primaryEmail']):
-                # Add to user's contact list
-                service.people().createContact(body=contact_info).execute()
-                # Log successful contact creation
-                logging.info(f"Added contact: {contact['primaryEmail']} to {user['primaryEmail']}")
-```
-
-
-
-* 更新資料時，發現Directory成員以離職不在清單上時，將每個帳戶的Contacts中剔除此人
-```python=
-    # For each contact email
-    for contact_email in contact_emails:
-        # If the contact email does not exist in the Directory
-        if not any(u for u in users if u['primaryEmail'] == contact_email):
-            # Find the contact in the contact list
-            contact = next((c for c in contact_list if c.get('emailAddresses', [{}])[0].get('value') == contact_email), None)
-            if contact:
-                # Delete the contact
-                service.people().deleteContact(resourceName=contact['resourceName']).execute()
-                 # Log successful contact deletion
-                logging.info(f"Deleted contact: {contact_email} from {user['primaryEmail']}")
+            # For each contact email
+            for contact_email in contact_emails:
+                # If the contact email does not exist in the Directory
+                if not any(u['primaryEmail'] == contact_email for u in users):
+                    # Find the contact in the contact list
+                    contact = next((c for c in contact_list if c.get('emailAddresses', [{}])[0].get('value') == contact_email), None)
+                    if contact:
+                        # Delete the contact
+                        service.people().deleteContact(resourceName=contact['resourceName']).execute()
+                        # Log successful contact deletion
+                        logging.info(f"Deleted contact: {contact_email} from {user['primaryEmail']}")
 ```
